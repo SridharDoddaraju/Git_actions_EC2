@@ -1,6 +1,5 @@
-name: Push-to-EC2
+name: Deploy to EC2
 
-# Trigger deployment only on push to main branch
 on:
   push:
     branches:
@@ -8,31 +7,57 @@ on:
 
 jobs:
   deploy:
-    name: Deploy to EC2 on master branch push
+    name: Deploy to EC2 on main branch push
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout the files
+      - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Deploy to Server 1
-        uses: easingthemes/ssh-deploy@main
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
-          REMOTE_HOST: ${{ secrets.HOST_DNS }}
-          REMOTE_USER: ${{ secrets.USERNAME }}
-          TARGET: ${{ secrets.TARGET_DIR }}
-
-      - name: Executing remote ssh commands using ssh key
-        uses: appleboy/ssh-action@master
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.5
         with:
-          host: ${{ secrets.HOST_DNS }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            sudo apt-get -y update
-            sudo apt-get install -y apache2
-            sudo systemctl start apache2
-            sudo systemctl enable apache2
-            cd home
-            sudo mv * /var/www/html
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+
+      - name: Deploy to Server
+        run: |
+          # Update the following variables with your specific values
+          REMOTE_HOST="${{ secrets.HOST_DNS }}"
+          REMOTE_USER="${{ secrets.USERNAME }}"
+          TARGET_DIR="${{ secrets.TARGET_DIR }}"
+          APPLICATION_PORT="3000"  # Replace with the port your application runs on
+
+          # Install Nginx (if not already installed)
+          sudo apt-get update
+          sudo apt-get install -y nginx
+
+          # Create an Nginx server block configuration file for your application
+          sudo tee /etc/nginx/sites-available/myapp.conf > /dev/null <<EOF
+          server {
+              listen 80;
+              server_name ${REMOTE_HOST}; # Use the DNS from your secrets
+
+              location / {
+                  proxy_pass http://localhost:${APPLICATION_PORT};
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+              }
+          }
+          EOF
+
+          # Enable the Nginx configuration
+          sudo ln -s /etc/nginx/sites-available/myapp.conf /etc/nginx/sites-enabled/
+          sudo nginx -t # Check the configuration for errors
+          sudo systemctl reload nginx # Reload Nginx to apply changes
+
+          # Change to your application directory and restart it
+          cd $TARGET_DIR
+          # Replace this with the command to start your application
+          # Example: npm start or node app.js
+          # If it's a Dockerized app, use docker-compose or docker run here
+          # Example: docker-compose up -d
+
+          # Restart Nginx to ensure the new configuration takes effect
+          sudo systemctl restart nginx
+        env:
+          TARGET_DIR: ${{ secrets.TARGET_DIR }}
