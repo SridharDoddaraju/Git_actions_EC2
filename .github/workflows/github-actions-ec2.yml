@@ -1,6 +1,6 @@
 name: Push-to-EC2
 
-# Trigger deployment only on push to the main branch
+# Trigger deployment only on push to main branch
 on:
   push:
     branches:
@@ -8,19 +8,14 @@ on:
 
 jobs:
   deploy:
-    name: Deploy to EC2 on main branch push
+    name: Deploy to EC2 on master branch push
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout the files
         uses: actions/checkout@v2
 
-      - name: Set up SSH
-        uses: webfactory/ssh-agent@v0.4
-        with:
-          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
-
-      - name: Deploy to Server
+      - name: Deploy to Server 1
         uses: easingthemes/ssh-deploy@main
         env:
           SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
@@ -28,19 +23,17 @@ jobs:
           REMOTE_USER: ${{ secrets.USERNAME }}
           TARGET: ${{ secrets.TARGET_DIR }}
 
-      - name: Install Apache and Deploy
-        run: |
-          # Update the following variables with your specific values
-          TARGET_DIR="${{ secrets.TARGET_DIR }}"
-
-          # Install Apache (if not already installed)
-          sudo apt-get update
-          sudo apt-get install -y apache2
-
-          # Move your web application files to the Apache document root
-          sudo mv $GITHUB_WORKSPACE/* /var/www/html/
-
-          # Restart Apache to apply changes
-          sudo systemctl restart apache2
-        env:
-          TARGET_DIR: ${{ secrets.TARGET_DIR }}
+      - name: Executing remote ssh commands using ssh key
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HOST_DNS }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            sudo apt-get -y update
+            sudo apt-get install -y apache2
+            sudo systemctl start apache2
+            sudo systemctl enable apache2
+            sudo systemctl restart apache2
+            cd home
+            sudo mv * /var/www/html
